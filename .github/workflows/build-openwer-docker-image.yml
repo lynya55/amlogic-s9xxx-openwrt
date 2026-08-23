@@ -1,4 +1,4 @@
-#=====================================================================================
+                                                                                                                                                 #=====================================================================================
 # https://github.com/ophub/amlogic-s9xxx-openwrt
 # Description: Build and publish OpenWrt Docker image
 # Build and Push to: https://hub.docker.com/
@@ -13,7 +13,7 @@ on:
       source_branch:
         description: "Select the source branch"
         required: false
-        default: "all"
+        default: "immortalwrt_master"
         type: choice
         options:
           - all
@@ -146,10 +146,10 @@ jobs:
           gh_token: ${{ secrets.GITHUB_TOKEN }}
           body: |
             ### OpenWrt Image Information
-            - Default IP: `192.168.1.1`
+            - Default IP: `192.168.10.1`
             - Default username: `root`
-            - Default password: `password`
-            - Default WIFI name: `OpenWrt`
+            - Default password: `1`
+            - Default WIFI name: `Immortalwrt`
             - Default WIFI password: `none`
             ### Install to EMMC
             - Login to OpenWrt → `System` → `Amlogic Service` → `Install OpenWrt`
