@@ -377,27 +377,27 @@ jobs:
         run: |
           docker rmi -f $(docker images -q) 2>/dev/null || true
           [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
-          
+
           # Безопасное и моментальное удаление тяжелых каталогов
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /usr/share/swift 2>/dev/null
-          
+
           sudo swapoff -a
           sudo rm -f /swapfile /mnt/swapfile
           sudo apt-get -y update
-          
+
           # Оптимальный и чистый набор сборочных пакетов
           sudo apt-get -y install build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
             gettext git libncurses-dev libssl-dev libxml2-dev patch unzip zlib1g-dev file \
             python3 python3-pip python3-setuptools rsync subversion swig texinfo u-boot-tools \
             libelf-dev libglib2.0-dev libltdl-dev libtool libtool-bin lrzsz nano p7zip p7zip-full \
             tar uuid-runtime jq ccache ecj fastjar m4 xz-utils libz-dev
-            
+
           sudo systemctl daemon-reload
           sudo apt-get -y autoremove --purge
           sudo apt-get clean
           sudo sed -i '/NVM_DIR/d;/skel/d' /root/{.bashrc,.profile} 2>/dev/null || true
           sudo rm -rf ~/{.cargo,.dotnet,.rustup}
-          
+
           # Время в Actions синхронизируется автоматически гипервизором, выводим в лог для проверки
           date -u
           echo "status=success" >> ${GITHUB_OUTPUT}
@@ -461,6 +461,21 @@ jobs:
           chmod +x ${DIY_P1_SH}
           cd openwrt/
           ${{ github.workspace }}/${DIY_P1_SH}
+
+      - name: Copy AmneziaWG packages into source tree
+        run: |
+          set -euo pipefail
+          # Копируем кастомные пакеты из корня репозитория в дерево исходников ImmortalWrt,
+          # чтобы make defconfig их увидел и собрал вместе с прошивкой (тем же ядром!).
+          for pkg in kmod-amneziawg amneziawg-tools luci-proto-amneziawg; do
+            if [ -d "${{ github.workspace }}/${pkg}" ]; then
+              echo "Copying ${pkg}..."
+              cp -r "${{ github.workspace }}/${pkg}" openwrt/package/
+            else
+              echo "WARNING: ${pkg} not found in repository root, skipping."
+            fi
+          done
+          ls -la openwrt/package/ | grep -i amnezia || true
 
       - name: Update feeds
         run: cd openwrt/ && ./scripts/feeds update -a
@@ -527,18 +542,34 @@ jobs:
         id: clean
         if: ${{ steps.compile.outputs.status == 'success' && !cancelled() }}
         run: |
-          # Clean up build artifacts and reclaim disk space
           cd openwrt/
           [[ -d "output" ]] || mkdir output
-          cp -f bin/targets/*/*/*rootfs.tar.gz output/
+
+          # Сохраняем rootfs
+          cp -f bin/targets/*/*/*rootfs.tar.gz output/ || true
+
+          # Сохраняем .apk пакеты AmneziaWG (и kmod, и userspace, и luci)
+          mkdir -p output/awgrelease
+          find bin -type f \( \
+              -name 'kmod-amneziawg*.apk' -o \
+              -name 'amneziawg-tools*.apk' -o \
+              -name 'luci-proto-amneziawg*.apk' -o \
+              -name 'luci-i18n-amneziawg*.apk' \
+            \) -exec cp {} output/awgrelease/ \; 2>/dev/null || true
+          echo "Collected AmneziaWG .apk files:"
+          ls -la output/awgrelease/ || true
+
+          # Сохраняем .config
           cp -f .config output/config
+
+          # Чистим всё, кроме output и .ccache
           ls -A | grep -vE '^(output|\.ccache)$' | xargs rm -rf || true
 
           # Export build metadata
           df -hT ${PWD}
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Upload OpenWrt rootfs to Release
+      - name: Upload OpenWrt rootfs + AmneziaWG packages to Release
         uses: ophub/upload-to-releases@main
         if: ${{ steps.clean.outputs.status == 'success' && !cancelled() }}
         with:
@@ -586,5 +617,5 @@ jobs:
             ### OpenWrt source code
             - [${{ env.REPO_NAME }}](${{ env.REPO_URL }}/tree/${{ env.REPO_BRANCH }})
             ### Applicable Platform
-            - 🐧 `arm64`
+            - 🧩 `arm64`
             - 🐋 Docker image: https://hub.docker.com/u/ophub
