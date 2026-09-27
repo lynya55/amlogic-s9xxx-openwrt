@@ -263,10 +263,14 @@ jobs:
           cd openwrt/
           make defconfig
 
-          # Принудительно включаем пакеты AmneziaWG и проверяем, что они не выброшены
-          ./scripts/config --enable PACKAGE_kmod-amneziawg
-          ./scripts/config --enable PACKAGE_amneziawg-tools
-          ./scripts/config --enable PACKAGE_luci-proto-amneziawg
+          # Принудительно включаем пакеты AmneziaWG через прямую правку .config
+          for sym in PACKAGE_kmod-amneziawg PACKAGE_amneziawg-tools PACKAGE_luci-proto-amneziawg PACKAGE_luci-i18n-amneziawg-ru; do
+            if grep -q "^# CONFIG_${sym} is not set" .config; then
+              sed -i "s/^# CONFIG_${sym} is not set/CONFIG_${sym}=y/" .config
+            elif ! grep -q "^CONFIG_${sym}=" .config; then
+              echo "CONFIG_${sym}=y" >> .config
+            fi
+          done
           make defconfig
 
           echo "=== AmneziaWG symbols in .config ==="
