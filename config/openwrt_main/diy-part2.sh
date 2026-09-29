@@ -60,3 +60,4 @@ echo "CONFIG_PACKAGE_luci-app-amneziawg=y" >> .config
 
 # Принудительное включение перевода (необязательно, если нужен русский/английский)
 echo "CONFIG_PACKAGE_luci-i18n-amneziawg-ru=y" >> .config
+echo "CONFIG_LUCI_LANG_ru=y" >> .config
