@@ -43,7 +43,7 @@ on:
       openwrt_kernel:
         description: "Select kernel version"
         required: false
-        default: "6.18.48"
+        default: "6.18.y"
         type: choice
         options:
           - 5.10.y
@@ -198,11 +198,11 @@ jobs:
         if: ${{ steps.init.outputs.status == 'success' && !cancelled() }}
         run: |
           if [[ "${{ matrix.branch }}" =~ ^openwrt ]]; then
-              REPO_URL="https://github.com"
+              REPO_URL="https://github.com/openwrt/openwrt"
           elif [[ "${{ matrix.branch }}" =~ ^lede ]]; then
-              REPO_URL="https://github.com"
+              REPO_URL="https://github.com/coolsnowwolf/lede"
           elif [[ "${{ matrix.branch }}" =~ ^immortalwrt ]]; then
-              REPO_URL="https://github.com"
+              REPO_URL="https://github.com/immortalwrt/immortalwrt"
           else
               echo "Error: Unknown source code repository."
               exit 1
@@ -226,10 +226,10 @@ jobs:
       - name: Load custom feeds
         run: |
           [[ -f "${FEEDS_CONF}" ]] && cp -f ${FEEDS_CONF} openwrt/feeds.conf.default
-          
+
           # Автоматически внедряем внешний репозиторий пакетов для go2rtc в конфигурацию фидов
           echo "src-git go2rtc_feed https://github.com" >> openwrt/feeds.conf.default
-          
+
           chmod +x ${DIY_P1_SH}
           cd openwrt/
           ${{ github.workspace }}/${DIY_P1_SH}
@@ -265,7 +265,7 @@ jobs:
         id: package
         run: |
           cd openwrt/
-          
+
           # 1. Формируем базовую структуру зависимостей
           make defconfig
 
@@ -281,3 +281,8 @@ jobs:
           # 3. Принудительно включаем пакеты AmneziaWG
           for sym in PACKAGE_kmod-amneziawg PACKAGE_amneziawg-tools PACKAGE_luci-proto-amneziawg PACKAGE_luci-i18n-amneziawg-ru; do
             if grep -q "^# CONFIG_${sym} is not set" .config; then
+              sed -i "s/^# CONFIG_${sym} is not set/CONFIG_${sym}=y/" .config
+            elif ! grep -q "^CONFIG_${sym}=" .config; then
+              echo "CONFIG_${sym}=y" >> .config
+            fi
+          done
