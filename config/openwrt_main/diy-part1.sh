@@ -11,4 +11,4 @@
 
 # Remove unnecessary packages
 # rm -rf package/utils/{ucode,fbtest}
-echo 'src-git amneziawg https://github.com/pro100it/awg-openwrt' >> feeds.conf.default
+echo 'src-git amneziawg https://github.com/amnezia-vpn/amneziawg-openwrt' >> feeds.conf.default
