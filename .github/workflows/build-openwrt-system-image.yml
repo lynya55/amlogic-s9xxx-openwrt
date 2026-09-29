@@ -261,9 +261,21 @@ jobs:
         id: package
         run: |
           cd openwrt/
+          
+          # 1. Сначала генерируем базовую конфигурацию
           make defconfig
 
-          # Принудительно включаем пакеты AmneziaWG через прямую правку .config
+          # 2. Принудительно инжектируем и фиксируем ваши пакеты + их зависимости
+          # Включаем полную версию ffmpeg и базовую поддержку звука
+          for sym in PACKAGE_ffmpeg-full PACKAGE_go2rtc PACKAGE_kmod-sound-core PACKAGE_kmod-sound-soc-core; do
+            if grep -q "^# CONFIG_${sym} is not set" .config; then
+              sed -i "s/^# CONFIG_${sym} is not set/CONFIG_${sym}=y/" .config
+            elif ! grep -q "^CONFIG_${sym}=" .config; then
+              echo "CONFIG_${sym}=y" >> .config
+            fi
+          done
+
+          # Удерживаем AmneziaWG
           for sym in PACKAGE_kmod-amneziawg PACKAGE_amneziawg-tools PACKAGE_luci-proto-amneziawg PACKAGE_luci-i18n-amneziawg-ru; do
             if grep -q "^# CONFIG_${sym} is not set" .config; then
               sed -i "s/^# CONFIG_${sym} is not set/CONFIG_${sym}=y/" .config
@@ -271,11 +283,13 @@ jobs:
               echo "CONFIG_${sym}=y" >> .config
             fi
           done
+          
+          # Применяем изменения
           make defconfig
 
-          echo "=== AmneziaWG symbols in .config ==="
-          grep -E 'amneziawg' .config || { echo "ERROR: AmneziaWG symbols missing!"; exit 1; }
-          echo "==================================="
+          echo "=== ПРОВЕРКА НАЛИЧИЯ ПАКЕТОВ В .CONFIG ==="
+          grep -E 'amneziawg|ffmpeg-full|go2rtc|sound-core' .config || { echo "КРИТИЧЕСКАЯ ОШИБКА: Пакеты были удалены утилитой defconfig из-за отсутствия зависимостей!"; exit 1; }
+          echo "=========================================="
 
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
