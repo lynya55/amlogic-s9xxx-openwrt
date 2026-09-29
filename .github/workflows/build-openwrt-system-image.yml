@@ -1,5 +1,5 @@
 #============================================================================================
-# https://github.com/ophub/amlogic-s9xxx-openwrt
+# https://github.com
 # Description: Build OpenWrt system image from source
 #============================================================================================
 
@@ -198,11 +198,11 @@ jobs:
         if: ${{ steps.init.outputs.status == 'success' && !cancelled() }}
         run: |
           if [[ "${{ matrix.branch }}" =~ ^openwrt ]]; then
-              REPO_URL="https://github.com/openwrt/openwrt"
+              REPO_URL="https://github.com"
           elif [[ "${{ matrix.branch }}" =~ ^lede ]]; then
-              REPO_URL="https://github.com/coolsnowwolf/lede"
+              REPO_URL="https://github.com"
           elif [[ "${{ matrix.branch }}" =~ ^immortalwrt ]]; then
-              REPO_URL="https://github.com/immortalwrt/immortalwrt"
+              REPO_URL="https://github.com"
           else
               echo "Error: Unknown source code repository."
               exit 1
@@ -226,6 +226,10 @@ jobs:
       - name: Load custom feeds
         run: |
           [[ -f "${FEEDS_CONF}" ]] && cp -f ${FEEDS_CONF} openwrt/feeds.conf.default
+          
+          # Автоматически внедряем внешний репозиторий пакетов для go2rtc в конфигурацию фидов
+          echo "src-git go2rtc_feed https://github.com" >> openwrt/feeds.conf.default
+          
           chmod +x ${DIY_P1_SH}
           cd openwrt/
           ${{ github.workspace }}/${DIY_P1_SH}
@@ -262,11 +266,10 @@ jobs:
         run: |
           cd openwrt/
           
-          # 1. Сначала генерируем базовую конфигурацию
+          # 1. Формируем базовую структуру зависимостей
           make defconfig
 
-          # 2. Принудительно инжектируем и фиксируем ваши пакеты + их зависимости
-          # Включаем полную версию ffmpeg и базовую поддержку звука
+          # 2. Инжектируем ваши мультимедийные и звуковые пакеты
           for sym in PACKAGE_ffmpeg-full PACKAGE_go2rtc PACKAGE_kmod-sound-core PACKAGE_kmod-sound-soc-core; do
             if grep -q "^# CONFIG_${sym} is not set" .config; then
               sed -i "s/^# CONFIG_${sym} is not set/CONFIG_${sym}=y/" .config
@@ -275,136 +278,6 @@ jobs:
             fi
           done
 
-          # Удерживаем AmneziaWG
+          # 3. Принудительно включаем пакеты AmneziaWG
           for sym in PACKAGE_kmod-amneziawg PACKAGE_amneziawg-tools PACKAGE_luci-proto-amneziawg PACKAGE_luci-i18n-amneziawg-ru; do
             if grep -q "^# CONFIG_${sym} is not set" .config; then
-              sed -i "s/^# CONFIG_${sym} is not set/CONFIG_${sym}=y/" .config
-            elif ! grep -q "^CONFIG_${sym}=" .config; then
-              echo "CONFIG_${sym}=y" >> .config
-            fi
-          done
-          
-          # Применяем изменения
-          make defconfig
-
-          echo "=== ПРОВЕРКА НАЛИЧИЯ ПАКЕТОВ В .CONFIG ==="
-          grep -E 'amneziawg|ffmpeg-full|go2rtc|sound-core' .config || { echo "КРИТИЧЕСКАЯ ОШИБКА: Пакеты были удалены утилитой defconfig из-за отсутствия зависимостей!"; exit 1; }
-          echo "=========================================="
-
-          make download -j8
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
-
-      - name: Get OpenWrt source commit hash
-        id: openwrthash
-        run: |
-          repo_path="$(echo "${{ env.REPO_URL }}" | awk -F"github.com/" '{print $2}')"
-          api_url="https://api.github.com/repos/${repo_path}/git/ref/heads/${{ env.REPO_BRANCH }}"
-          source_hash=$(curl -fsSL -m 20 \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              ${api_url} |
-              jq -r '.object.sha'
-          )
-          [[ -z "${source_hash}" || "${source_hash}" == "null" ]] && source_hash="${{ github.sha }}"
-          echo "source_hash=${source_hash}" >> ${GITHUB_ENV}
-          echo "status=success" >> ${GITHUB_OUTPUT}
-
-      - name: Cache ccache
-        uses: actions/cache@v5
-        with:
-          path: /builder/openwrt/.ccache
-          key: ccache-openwrt-${{ env.REPO_NAME }}-${{ hashFiles('config/immortalwrt_master/config') }}
-          restore-keys: |
-            ccache-openwrt-${{ env.REPO_NAME }}-
-
-      - name: Compile the OpenWrt firmware
-        id: compile
-        run: |
-          cd openwrt/
-          echo -e "Compiling with $(nproc) threads"
-          make -j$(($(nproc) + 1)) || make -j1 V=s
-
-          echo -e "ccache statistics:"
-          ccache -s 2>/dev/null
-          echo -e "ccache directory size:"
-          du -sh $(pwd)/.ccache 2>/dev/null || echo "No ccache directory found."
-
-          echo "status=success" >> ${GITHUB_OUTPUT}
-
-      - name: Clean up build files and reclaim disk space
-        id: clean
-        if: ${{ steps.compile.outputs.status == 'success' && !cancelled() }}
-        run: |
-          cd openwrt/
-          [[ -d "output" ]] || mkdir output
-
-          cp -f bin/targets/*/*/*rootfs.tar.gz output/ || true
-
-          mkdir -p output/awgrelease
-          find bin -type f \( \
-              -name 'kmod-amneziawg*.apk' -o \
-              -name 'amneziawg-tools*.apk' -o \
-              -name 'luci-proto-amneziawg*.apk' -o \
-              -name 'luci-i18n-amneziawg*.apk' \
-            \) -exec cp {} output/awgrelease/ \; 2>/dev/null || true
-          echo "Collected AmneziaWG .apk files:"
-          ls -la output/awgrelease/ || true
-
-          cp -f .config output/config
-
-          ls -A | grep -vE '^(output|\.ccache)$' | xargs rm -rf || true
-
-          df -hT ${PWD}
-          echo "status=success" >> ${GITHUB_OUTPUT}
-
-      - name: Upload OpenWrt rootfs + AmneziaWG packages to Release
-        uses: ophub/upload-to-releases@main
-        if: ${{ steps.clean.outputs.status == 'success' && !cancelled() }}
-        with:
-          tag: ${{ env.build_tag }}
-          artifacts: openwrt/output/*
-          allow_updates: true
-          remove_artifacts: false
-          replaces_artifacts: true
-          make_latest: true
-          gh_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Package OpenWrt for target boards
-        if: ${{ steps.clean.outputs.status == 'success' && !cancelled() }}
-        uses: ophub/amlogic-s9xxx-openwrt@main
-        with:
-          openwrt_path: openwrt/output/*rootfs.tar.gz
-          openwrt_ip: ${{ inputs.openwrt_ip }}
-          openwrt_board: ${{ inputs.openwrt_board }}
-          openwrt_kernel: ${{ inputs.openwrt_kernel }}
-          auto_kernel: ${{ inputs.auto_kernel }}
-          kernel_repo: ${{ inputs.kernel_repo }}
-          kernel_usage: ${{ inputs.kernel_usage }}
-          builder_name: ${{ inputs.builder_name }}
-
-      - name: Upload packaged OpenWrt to Release
-        uses: ophub/upload-to-releases@main
-        if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
-        with:
-          tag: ${{ env.build_tag }}
-          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
-          allow_updates: true
-          remove_artifacts: false
-          replaces_artifacts: true
-          make_latest: true
-          gh_token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            ### OpenWrt Image Information
-            - Default IP: `192.168.1.1`
-            - Default username: `root`
-            - Default password: `password`
-            - Default WIFI name: `OpenWrt`
-            - Default WIFI password: `none`
-            ### Install to EMMC
-            - Login to OpenWrt → `System` → `Amlogic Service` → `Install OpenWrt`
-            ### OpenWrt source code
-            - [${{ env.REPO_NAME }}](${{ env.REPO_URL }}/tree/${{ env.REPO_BRANCH }})
-            ### Applicable Platform
-            - 🧩 `arm64`
-            - 🐋 Docker image: https://hub.docker.com/u/ophub
