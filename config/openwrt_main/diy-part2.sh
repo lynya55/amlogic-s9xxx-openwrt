@@ -53,3 +53,10 @@ git clone -b main https://github.com/ophub/luci-app-amlogic.git package/luci-app
 # git apply ../config/patches/{0001*,0002*}.patch --directory=feeds/luci
 #
 # ------------------------------- Additional customizations ends -------------------------------
+# Включение AmneziaWG и интерфейса управления в LuCI
+echo "CONFIG_PACKAGE_kmod-amneziawg=y" >> .config
+echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
+echo "CONFIG_PACKAGE_luci-app-amneziawg=y" >> .config
+
+# Принудительное включение перевода (необязательно, если нужен русский/английский)
+echo "CONFIG_PACKAGE_luci-i18n-amneziawg-ru=y" >> .config
