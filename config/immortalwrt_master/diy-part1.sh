@@ -12,4 +12,3 @@
 # Remove unnecessary packages
 # rm -rf package/emortal/{autosamba,ipv6-helper}
 echo 'src-git amneziawg https://github.com/amnezia-vpn/amneziawg-openwrt' >> feeds.conf.default
-
