@@ -60,4 +60,8 @@ echo "CONFIG_PACKAGE_luci-app-amneziawg=y" >> .config
 
 # Принудительное включение перевода (необязательно, если нужен русский/английский)
 echo "CONFIG_PACKAGE_luci-i18n-amneziawg-ru=y" >> .config
-
+echo "CONFIG_LUCI_LANG_ru=y" >> .config
+# Исправление формата версии AmneziaWG для пакетного менеджера apk
+if [ -f feeds/amneziawg/luci-proto-amneziawg/Makefile ]; then
+    sed -i 's/PKG_VERSION:=0.0.1-1/PKG_VERSION:=0.0.1.1/g' feeds/amneziawg/luci-proto-amneziawg/Makefile
+fi
